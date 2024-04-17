@@ -14,28 +14,45 @@ from src import (
 
 from src import SPIESP32 as SPI
 from src import CANFrame
+from helpers import (
+    timeClass,
+    displayButtons,
+)
 import asyncio
+import datetime
 
 DOMAIN = "car.control"
 can = CAN(SPI(cs=28))
 
-# 109
+
+#Parktronic Messsage
+#Canbus ID: 0x0E1
+#Data Length: 7 Bytes
+# 2: Right chan, Left chan, Rear(0), Front(0) channels, Sound enabled
+# 3: 00 - 111111 silence, 000000 continuosly beep
+# 4: 3 bytes left rear, (011 - 0, 010 - 1, 001 - 2, 000 - 3). 5 bytes rear center ( 000xx - 4, 001xx - 3, 010xx - 3, 011xx - 2, 100xx - 2, 101x - 1, 110xx - 1, 111xx - 0 )
+# 5: 3 bytes right rear, 5 bytes front left
+# 6: 3 bytes front center, 3 bytes front right, 1 byte Show parktronic window.
+# 7: 02 when no sensors, ign off, C2 when no sensors, ign on
+#Example Data: 0x00 0xF0 
+
+# 109 menu
 menu = CANFrame(can_id=0x3E5, data=b"\x40\x00\x00\x00\x00\x00")
-# 108
+# 108 trip
 trip = CANFrame(can_id=0x3E5, data=b"\x00\x40\x00\x00\x00\x00")
-# 110
+# 110 mode
 mode = CANFrame(can_id=0x3E5, data=b"\x00\x10\x00\x00\x00\x00")
-# 101
+# 101 ok 
 ok = CANFrame(can_id=0x3E5, data=b"\x00\x00\x40\x00\x00\x00")
-# 113
+# 113 esc
 esc = CANFrame(can_id=0x3E5, data=b"\x00\x00\x10\x00\x00\x00")
-# 119
+# 119 up
 up = CANFrame(can_id=0x3E5, data=b"\x00\x00\x00\x00\x00\x40")
-# 115
+# 115 down
 down = CANFrame(can_id=0x3E5, data=b"\x00\x00\x00\x00\x00\x10")
-# 97
+# 97 left
 left = CANFrame(can_id=0x3E5, data=b"\x00\x00\x00\x00\x00\x01")
-# 100
+# 100 right
 right = CANFrame(can_id=0x3E5, data=b"\x00\x00\x00\x00\x00\x04")
 
 # Create a class with a function, where i can send a button code and it returns the can bytearray for that button
@@ -75,9 +92,23 @@ def index(req):
 def button(req):
     if req.method == "POST":
         logging.debug(f"POST /rest/button [{req.data}]")
-        sender = CanRadioButtonPacketSender()
-        print(sender.GetButtonCode(req.data))
-        can.sendMessage(sender.GetButtonCode(req.data))
+        #sender = CanRadioButtonPacketSender()
+        #print(sender.GetButtonCode(req.data))
+        #can.sendMessage(sender.GetButtonCode(req.data))
+        buttons = displayButtons()
+        buttons.setButton(req.data)
+        can.sendMessage(CANFrame(can_id=0x3E5, data=buttons.getMsgBuf()))
+        buttons.reset()
+        return redirect("/")
+    
+@server.route("/rest/time", methods=["POST"])
+def time(req):
+    if req.method == "POST":
+        logging.debug(f"POST /rest/time [{req.data}]")
+        settime = timeClass()
+        settime.setTime(datetime.datetime.strptime(req.data["time"], "%d/%m/%Y, %H:%M:%S"))
+        can.sendMessage(CANFrame(can_id=0x276, data=settime.getMsgBuf()))
+        settime.reset()
         return redirect("/")
 
 # microsoft windows redirects
@@ -145,6 +176,13 @@ async def main():
     server.run()
     logging.info("webserv started")
 
+
+def listenCan():
+    end_time, n = time.ticks_add(time.ticks_ms(), 1000), -1
+    while True:
+        error, iframe = can.readMessage()
+        if error == ERROR.ERROR_OK:
+            logging.debug("RX {}".format(iframe))
 
 async def CANSendTaskFunction():
     while True:

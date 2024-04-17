@@ -3,7 +3,7 @@ import ctypes
 canID = ctypes.c_uint16(0x3E5)
 
 # 109
-menu = b"\x40\x00\x00\x00\x00\x00"
+menu = bytearray([0b01000000, 0x00, 0x00, 0x00, 0x00, 0x00])
 # 108
 trip = b"\x00\x40\x00\x00\x00\x00"
 # 110
