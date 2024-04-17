@@ -21,7 +21,7 @@ from helpers import (
 import asyncio
 import datetime
 
-DOMAIN = "car.control"
+DOMAIN = "Peugeot307cc"
 can = CAN(SPI(cs=28))
 
 
